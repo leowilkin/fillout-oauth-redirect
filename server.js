@@ -41,27 +41,44 @@ app.post('/:formId', async (req, res) => {
   const { formId } = req.params;
   const { email } = req.body;
 
+  console.log(`[SEARCH] Form: ${formId}, Email: "${email}"`);
+
   if (!email) {
+    console.log('[SEARCH] Rejected: empty email');
     return res.send(formHTML(formId, 'Please enter your email.'));
   }
+
+  const sanitizedEmail = email.trim().toLowerCase();
+  const escapedEmail = sanitizedEmail.replace(/"/g, '\\"');
+  const filterFormula = `FIND("${escapedEmail}", LOWER(ARRAYJOIN({poc_email}, ",")))`;
+  console.log(`[SEARCH] Table: ${tableName}, Filter: ${filterFormula}`);
 
   try {
     const records = await base(tableName)
       .select({
-        filterByFormula: `LOWER({poc_email}) = LOWER("${email.replace(/"/g, '\\"')}")`,
+        filterByFormula: filterFormula,
         maxRecords: 1,
       })
       .firstPage();
 
+    console.log(`[SEARCH] Results: ${records.length} record(s) found`);
+
     if (records.length === 0) {
+      console.log(`[SEARCH] No match for email: "${sanitizedEmail}"`);
       return res.send(formHTML(formId, 'No matching record found for that email.'));
     }
 
-    const recordId = records[0].id;
+    const record = records[0];
+    const recordId = record.id;
+    const pocEmailField = record.get('poc_email');
+    console.log(`[SEARCH] Match found - Record ID: ${recordId}, poc_email: "${pocEmailField}"`);
+
     const redirectUrl = `https://forms.hackclub.com/t/${formId}?id=${recordId}`;
+    console.log(`[SEARCH] Redirecting to: ${redirectUrl}`);
     res.redirect(redirectUrl);
   } catch (err) {
-    console.error('Airtable error:', err);
+    console.error('[SEARCH] Airtable error:', err.message);
+    console.error('[SEARCH] Full error:', err);
     res.send(formHTML(formId, 'Something went wrong. Please try again.'));
   }
 });
